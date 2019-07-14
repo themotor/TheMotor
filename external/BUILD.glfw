@@ -1,0 +1,150 @@
+package(default_visibility = ["//visibility:public"])
+
+_posix_srcs = [
+    "src/posix_thread.c",
+    "src/posix_thread.h",
+    "src/posix_time.c",
+    "src/posix_time.h",
+]
+
+win32_srcs = [
+    "src/win32_init.c",
+    "src/win32_joystick.c",
+    "src/win32_joystick.h",
+    "src/win32_monitor.c",
+    "src/win32_platform.h",
+    "src/win32_thread.c",
+    "src/win32_time.c",
+    "src/win32_window.c",
+    "src/wgl_context.c",
+    "src/wgl_context.h",
+]
+
+mac_srcs = [
+    "src/cocoa_init.m",
+    "src/cocoa_joystick.h",
+    "src/cocoa_joystick.m",
+    "src/cocoa_monitor.m",
+    "src/cocoa_platform.h",
+    "src/cocoa_time.c",
+    "src/cocoa_window.m",
+    "src/nsgl_context.h",
+    "src/nsgl_context.m",
+] + _posix_srcs
+
+linux_srcs = [
+    "src/x11_init.c",
+    "src/x11_monitor.c",
+    "src/x11_platform.h",
+    "src/x11_window.c",
+    "src/linux_joystick.c",
+    "src/linux_joystick.h",
+    "src/glx_context.c",
+    "src/glx_context.h",
+] + _posix_srcs
+
+common_srcs = [
+    "src/context.c",
+    "src/init.c",
+    "src/input.c",
+    "src/internal.h",
+    "src/mappings.h",
+    "src/monitor.c",
+    "src/vulkan.c",
+    "src/window.c",
+    "src/xkb_unicode.c",
+    "src/xkb_unicode.h",
+    "src/osmesa_context.c",
+    "src/osmesa_context.h",
+    "src/egl_context.c",
+    "src/egl_context.h",
+]
+
+glfw_hdrs = glob(["include/**/*.h"])
+
+config_setting(
+    name = "osx",
+    constraint_values = [
+        "@bazel_tools//platforms:osx",
+    ],
+)
+
+config_setting(
+    name = "windows",
+    values = {"cpu": "x64_windows"},
+)
+
+config_setting(
+    name = "linux",
+    constraint_values = ["@bazel_tools//platforms:linux"],
+)
+
+cc_library(
+    name = "glfw",
+    visibility = ["//visibility:public"],
+    strip_include_prefix = "include",
+    hdrs = glfw_hdrs,
+    copts = select({
+        "//:windows": ["-D_GLFW_WIN32"],
+        "//:linux": ["-D_GLFW_X11"],
+        "//:osx": ["-D_GLFW_COCOA"],
+    }),
+    srcs = common_srcs + glfw_hdrs + select({
+        "//:windows": win32_srcs,
+        "//:linux": linux_srcs,
+        "//:osx": mac_srcs,
+    }),
+)
+
+cc_library(
+    name = "glad",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = [
+        "deps/glad/gl.h",
+        "deps/glad/khrplatform.h",
+        "deps/glad/vk_platform.h",
+        "deps/glad/vulkan.h",
+    ],
+    srcs = [
+        "deps/glad_gl.c",
+        "deps/glad_vulkan.c",
+    ],
+)
+
+cc_library(
+    name = "linmath",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = ["deps/linmath.h"],
+)
+
+cc_library(
+    name = "stb_image_write",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = ["deps/stb_image_write.h"],
+)
+
+cc_library(
+    name = "getopt",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = ["deps/getopt.h"],
+    srcs = ["deps/getopt.c", "deps/getopt.h"],
+)
+
+cc_library(
+    name = "tinycthread",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = ["deps/tinycthread.h"],
+    srcs = ["deps/tinycthread.c", "deps/tinycthread.h"],
+)
+
+cc_library(
+    name = "nuklear",
+    visibility = ["//:__subpackages__"],
+    strip_include_prefix = "deps",
+    hdrs = ["deps/nuklear.h", "deps/nuklear_glfw_gl2.h"],
+)
