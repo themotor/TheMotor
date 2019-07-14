@@ -33,3 +33,4 @@
 
 bazel-*
 compile_commands.json
+.clangd
