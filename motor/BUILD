@@ -7,3 +7,9 @@ cc_library(
     srcs = ["engine.cpp"],
     hdrs = ["engine.h"],
 )
+
+cc_library(
+    name = "window",
+    hdrs = ["window.h"],
+    srcs = ["window.cpp"],
+)
