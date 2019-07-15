@@ -14,6 +14,7 @@ class Engine
 
  private:
   std::unique_ptr<Window> window_manager_;
+  bool is_running_ = false;
 };
 }  // namespace motor
 

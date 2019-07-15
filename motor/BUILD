@@ -7,6 +7,7 @@ cc_library(
     srcs = ["engine.cpp"],
     hdrs = ["engine.h"],
     deps = [
+        ":event",
         ":window",
         # Make this a select statement once we have more implementations.
         "//motor/windows:glfw_window",
