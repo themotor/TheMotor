@@ -8,6 +8,7 @@ cc_library(
     deps = [
         "//motor:window",
         "@glfw//:glfw",
+        "//motor:event",
     ],
     alwayslink = 1,
 )

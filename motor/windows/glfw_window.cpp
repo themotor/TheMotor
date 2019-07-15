@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "GLFW/glfw3.h"
+#include "motor/event.h"
 #include "motor/window.h"
 
 namespace motor
@@ -25,10 +26,20 @@ class GLFWWindow : public Window
                          /*monitor=*/nullptr, /*share=*/nullptr);
 
     glfwMakeContextCurrent(handle_);
-    // Just to check it works, should generate a blue window.
-    glClearColor(0., 0., 1., 1.);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glfwSwapBuffers(handle_);
+    // TODO(kadircet): Move this into renderer, once we have one ...
+    while (true)
+    {
+      // Just to check it works, should generate a blue window.
+      glClearColor(0., 0., 1., 1.);
+      glClear(GL_COLOR_BUFFER_BIT);
+      glfwSwapBuffers(handle_);
+      glfwPollEvents();
+      if (glfwWindowShouldClose(handle_))
+      {
+        dispatcher_.Dispatch(WindowClose());
+        break;
+      }
+    }
   }
 
   ~GLFWWindow() final
