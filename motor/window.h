@@ -7,6 +7,8 @@
 #include <string>
 #include <string_view>
 
+#include "event.h"
+
 namespace motor
 {
 struct WindowOptions
@@ -24,6 +26,15 @@ class Window
 {
  public:
   virtual ~Window() = default;
+
+  template <typename T>
+  void RegisterEventHandler(Event::Handler<T> handler)
+  {
+    dispatcher_.Set<T>(std::move(handler));
+  }
+
+ protected:
+  EventDispatcher dispatcher_;
 };
 
 class WindowPlugin

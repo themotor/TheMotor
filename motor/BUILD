@@ -17,6 +17,9 @@ cc_library(
     name = "window",
     hdrs = ["window.h"],
     srcs = ["window.cpp"],
+    deps = [
+        ":event",
+    ],
 )
 
 cc_library(
