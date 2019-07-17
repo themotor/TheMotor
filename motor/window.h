@@ -33,7 +33,12 @@ class Window
     dispatcher_.Set<T>(std::move(handler));
   }
 
+  virtual void Update() = 0;
+
  protected:
+  const EventDispatcher& GetDispatcher() const { return dispatcher_; }
+
+ private:
   EventDispatcher dispatcher_;
 };
 

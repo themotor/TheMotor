@@ -23,21 +23,10 @@ class GLFWWindow : public Window
         glfwCreateWindow(opts_.width_, opts_.height_, opts_.title_.c_str(),
                          /*monitor=*/nullptr, /*share=*/nullptr);
 
+    glfwSetWindowUserPointer(handle_, this);
+
     glfwMakeContextCurrent(handle_);
-    // TODO(kadircet): Move this into renderer, once we have one ...
-    while (true)
-    {
-      // Just to check it works, should generate a blue window.
-      glClearColor(0., 0., 1., 1.);
-      glClear(GL_COLOR_BUFFER_BIT);
-      glfwSwapBuffers(handle_);
-      glfwPollEvents();
-      if (glfwWindowShouldClose(handle_))
-      {
-        dispatcher_.Dispatch(WindowClose());
-        break;
-      }
-    }
+    glfwSetWindowCloseCallback(handle_, CloseCallback);
   }
 
   ~GLFWWindow() final
@@ -46,11 +35,29 @@ class GLFWWindow : public Window
     glfwTerminate();
   }
 
+  void Update() override
+  {
+    // TODO(kadircet): Move this into renderer, once we have one ...
+    // Just to check it works, should generate a blue window.
+    glClearColor(0., 0., 1., 1.);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glfwSwapBuffers(handle_);
+    glfwPollEvents();
+  }
+
  private:
   WindowOptions opts_;
   // Unfortunately we can't use a unique_ptr here, because glfw headers only
   // forward declares GLFWwindow.
   GLFWwindow* handle_;
+
+  static void CloseCallback(GLFWwindow* window)
+  {
+    auto* glfw_window =
+        static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    glfw_window->GetDispatcher().Dispatch(WindowClose());
+  }
 };
 
 }  // namespace
