@@ -6,9 +6,10 @@ cc_library(
     name = "glfw_window",
     srcs = ["glfw_window.cpp"],
     deps = [
-        "//motor:window",
         "@glfw//:glfw",
+        "@glog//:glog",
         "//motor:event",
+        "//motor:window",
     ],
     alwayslink = 1,
 )

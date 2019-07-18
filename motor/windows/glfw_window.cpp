@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "GLFW/glfw3.h"
+#include "glog/logging.h"
 #include "motor/event.h"
 #include "motor/window.h"
 
@@ -9,16 +10,18 @@ namespace motor
 {
 namespace
 {
+void GlfwErrorHandler(int /*err_code*/, const char* err_desc)
+{
+  LOG(FATAL) << "Couldn't initialize GLFWwindow: " << err_desc;
+}
+
 class GLFWWindow : public Window
 {
  public:
   explicit GLFWWindow(WindowOptions opts) : opts_(std::move(opts))
   {
-    if (!glfwInit())
-    {
-      // TODO(kadircet): Log the error.
-      exit(EXIT_FAILURE);
-    }
+    glfwSetErrorCallback(GlfwErrorHandler);
+    glfwInit();
     handle_ =
         glfwCreateWindow(opts_.width_, opts_.height_, opts_.title_.c_str(),
                          /*monitor=*/nullptr, /*share=*/nullptr);
@@ -54,6 +57,7 @@ class GLFWWindow : public Window
 
   static void CloseCallback(GLFWwindow* window)
   {
+    LOG(INFO) << "Received close callback";
     auto* glfw_window =
         static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
     glfw_window->GetDispatcher().Dispatch(WindowClose());
