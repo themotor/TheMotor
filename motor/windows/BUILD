@@ -10,6 +10,7 @@ cc_library(
         "@glog//:glog",
         "//motor:event",
         "//motor:window",
+        "//motor/input:input",
     ],
     alwayslink = 1,
 )

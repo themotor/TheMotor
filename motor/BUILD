@@ -9,6 +9,7 @@ cc_library(
     deps = [
         ":event",
         ":window",
+        "//motor/input:input",
         # Make this a select statement once we have more implementations.
         "//motor/windows:glfw_window",
     ],

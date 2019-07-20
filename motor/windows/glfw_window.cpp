@@ -4,6 +4,7 @@
 #include "GLFW/glfw3.h"
 #include "glog/logging.h"
 #include "motor/event.h"
+#include "motor/input/input.h"
 #include "motor/window.h"
 
 namespace motor
