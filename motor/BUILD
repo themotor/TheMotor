@@ -12,6 +12,7 @@ cc_library(
         "//motor/input:input",
         # Make this a select statement once we have more implementations.
         "//motor/windows:glfw_window",
+        "@glog//:glog",
     ],
 )
 
