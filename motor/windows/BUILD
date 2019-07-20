@@ -11,6 +11,7 @@ cc_library(
         "//motor:event",
         "//motor:window",
         "//motor/input:input",
+        "//motor/input:device",
     ],
     alwayslink = 1,
 )
