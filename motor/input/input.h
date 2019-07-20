@@ -8,21 +8,12 @@
 namespace motor::input
 {
 // TODO(kadircet): the following should come from enums, once we have them...
-constexpr const size_t kNumKeys = 256;
+constexpr const size_t kNumKeys = 512;
 constexpr const size_t kNumAxes = 8;
-
-enum DeviceType
-{
-  UNKNOWN_DEVICE = 0,
-  // TODO(kadircet): Handle multiple devices of same type.
-  KEYBOARD_0,
-  MOUSE_0,
-  GAMEPAD_0,
-};
 
 struct KeyInput
 {
-  DeviceType device_id_ = UNKNOWN_DEVICE;
+  size_t device_id_ = 0;
   // TODO(kadircet): Come up with an enum for these.
   int id_ = 0;
   bool is_down_ = false;
@@ -30,11 +21,18 @@ struct KeyInput
 
 struct AxisInput
 {
-  DeviceType device_id_ = UNKNOWN_DEVICE;
+  size_t device_id_ = 0;
   // TODO(kadircet): Come up with an enum for these.
   int id_ = 0;
   // In the range [-1., 1]
   float value_ = 0;
+};
+
+struct CursorPosition
+{
+  // Relative to upper left corner of context.
+  double x_ = 0;
+  double y_ = 0;
 };
 
 // This event contains information regarding current state of the input. It is
@@ -45,6 +43,7 @@ struct InputStateBroadcast : public Event
 {
   std::vector<KeyInput> keys_;
   std::vector<AxisInput> axes_;
+  CursorPosition cursor_;
 };
 
 }  // namespace motor::input
