@@ -8,3 +8,14 @@ cc_library(
         "//motor:plugin",
     ],
 )
+
+cc_library(
+    name = "vulkan_renderer",
+    srcs = ["vulkan_renderer.cpp"],
+    deps = [
+        ":renderer",
+        "@glog//:glog",
+        "@vulkan//:vulkan",
+    ],
+    alwayslink = 1,
+)
