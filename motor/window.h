@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "event.h"
+#include "plugin.h"
 
 namespace motor
 {
@@ -33,41 +34,21 @@ class Window
     dispatcher_.Set<T>(std::move(handler));
   }
 
+  void SetOptions(WindowOptions opts);
+  virtual void CreateWindow() = 0;
+
   virtual void Update() = 0;
 
  protected:
   const EventDispatcher& GetDispatcher() const { return dispatcher_; }
+  const WindowOptions& GetOptions() const { return opts_; }
 
  private:
   EventDispatcher dispatcher_;
+  WindowOptions opts_;
 };
 
-class WindowPlugin
-{
- public:
-  template <typename T>
-  class Set
-  {
-   private:
-    static std::unique_ptr<Window> CreateWindow(WindowOptions opts)
-    {
-      return std::make_unique<T>(std::move(opts));
-    }
-
-   public:
-    Set()
-    {
-      assert(create_window == nullptr &&
-             "A window plugin has already been registered!");
-      create_window = CreateWindow;
-    }
-  };
-
-  static std::unique_ptr<Window> CreateWindow(WindowOptions opts);
-
- private:
-  static std::unique_ptr<Window> (*create_window)(WindowOptions opts);
-};
+using WindowPlugin = SinglePluginRegistry<Window>;
 
 }  // namespace motor
 #endif

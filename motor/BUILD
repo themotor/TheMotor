@@ -8,6 +8,7 @@ cc_library(
     hdrs = ["engine.h"],
     deps = [
         ":event",
+        ":plugin",
         ":window",
         "//motor/input:input",
         # Make this a select statement once we have more implementations.
@@ -22,6 +23,7 @@ cc_library(
     srcs = ["window.cpp"],
     deps = [
         ":event",
+        ":plugin",
     ],
 )
 
@@ -29,4 +31,10 @@ cc_library(
     name = "event",
     hdrs = ["event.h"],
     srcs = ["event.cpp"],
+)
+
+cc_library(
+    name = "plugin",
+    hdrs = ["plugin.h"],
+    srcs = ["plugin.cpp"],
 )
