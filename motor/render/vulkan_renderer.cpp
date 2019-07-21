@@ -390,11 +390,12 @@ class VulkanRenderer : public Renderer
     cmd_buf_begin_info.setFlags(
         vk::CommandBufferUsageFlagBits::eSimultaneousUse);
 
-    for (const auto& cmd_buffer : cmd_buffers_)
+    for (size_t i = 0; i < cmd_buffers_.size(); ++i)
     {
+      auto& cmd_buffer = cmd_buffers_[i];
       VkSuccuessOrDie(cmd_buffer.begin(cmd_buf_begin_info),
                       "Couldn't start command buffer");
-      cmd_buffer.clearColorImage(vk_images_[0], vk::ImageLayout::eGeneral,
+      cmd_buffer.clearColorImage(vk_images_[i], vk::ImageLayout::eGeneral,
                                  &color, 1, &image_range);
 
       VkSuccuessOrDie(cmd_buffer.end(), "Couldn't end command buffer");
