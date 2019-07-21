@@ -1,4 +1,7 @@
+#include <bits/stdint-uintn.h>
+
 #include <cstddef>
+#include <limits>
 #include <tuple>
 #include <vector>
 
@@ -19,6 +22,19 @@ T VkSuccuessOrDie(vk::ResultValue<T> res_and_val, const char* desc)
       << "VK error: " << desc << '-' << static_cast<int>(res_and_val.result);
   return res_and_val.value;
 }
+void VkSuccuessOrDie(vk::Result res, const char* desc)
+{
+  CHECK(res == vk::Result::eSuccess)
+      << "VK error: " << desc << '-' << static_cast<int>(res);
+}
+
+struct DepthBuffer
+{
+  vk::Format format_;
+  vk::Image image_;
+  vk::DeviceMemory memory_;
+  vk::ImageView view_;
+};
 
 vk::Instance CreateInstance()
 {
@@ -169,7 +185,8 @@ std::vector<vk::CommandBuffer> AllocateCommandBuffers(
 
 vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
                                  const vk::SurfaceKHR& vk_surface,
-                                 const vk::Device& vk_device)
+                                 const vk::Device& vk_device,
+                                 vk::Format* format)
 {
   std::vector<vk::SurfaceFormatKHR> formats = VkSuccuessOrDie(
       phy_dev.getSurfaceFormatsKHR(vk_surface), "Couldn't get surface formats");
@@ -179,6 +196,7 @@ vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
   {
     formats[0].format = vk::Format::eB8G8R8A8Snorm;
   }
+  *format = formats[0].format;
 
   vk::SurfaceCapabilitiesKHR surf_caps =
       VkSuccuessOrDie(phy_dev.getSurfaceCapabilitiesKHR(vk_surface),
@@ -220,6 +238,117 @@ vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
                          "Couldn't create swapchain");
 }
 
+std::vector<vk::ImageView> CreateImageViews(
+    const vk::Device& vk_dev, const std::vector<vk::Image>& vk_images,
+    const vk::Format& vk_format)
+{
+  std::vector<vk::ImageView> image_views;
+  for (const vk::Image& image : vk_images)
+  {
+    vk::ImageViewCreateInfo image_view_info;
+    image_view_info.setImage(image)
+        .setViewType(vk::ImageViewType::e2D)
+        .setComponents(vk::ComponentMapping(
+            vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG,
+            vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA))
+        .setFlags(static_cast<vk::ImageViewCreateFlags>(0))
+        .setFormat(vk_format)
+        .setSubresourceRange(vk::ImageSubresourceRange(
+            vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+    image_views.push_back(VkSuccuessOrDie(
+        vk_dev.createImageView(image_view_info), "Couldn't create imageview"));
+  }
+  return image_views;
+}
+
+DepthBuffer CreateDepthBuffer(const vk::PhysicalDevice& phy_dev,
+                              const vk::Device& dev)
+{
+  DepthBuffer depth_buffer;
+  depth_buffer.format_ = vk::Format::eD16Unorm;
+
+  vk::FormatProperties format_props =
+      phy_dev.getFormatProperties(depth_buffer.format_);
+  vk::ImageTiling tiling;
+  if (format_props.linearTilingFeatures &
+      vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+  {
+    tiling = vk::ImageTiling::eLinear;
+  }
+  else if (format_props.optimalTilingFeatures &
+           vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+  {
+    tiling = vk::ImageTiling::eOptimal;
+  }
+  else
+  {
+    LOG(FATAL) << "16bit norm format is not supported";
+  }
+
+  vk::ImageCreateInfo image_create_info;
+  image_create_info.setImageType(vk::ImageType::e2D)
+      .setArrayLayers(1)
+      .setExtent(vk::Extent3D(800, 600, 1))
+      .setFlags(static_cast<vk::ImageCreateFlags>(0))
+      .setFormat(depth_buffer.format_)
+      .setInitialLayout(vk::ImageLayout::eUndefined)
+      .setMipLevels(1)
+      .setPQueueFamilyIndices(nullptr)
+      .setQueueFamilyIndexCount(0)
+      .setSamples(vk::SampleCountFlagBits::e1)
+      .setSharingMode(vk::SharingMode::eExclusive)
+      .setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment)
+      .setTiling(tiling)
+      .setPNext(nullptr);
+  depth_buffer.image_ = VkSuccuessOrDie(dev.createImage(image_create_info),
+                                        "Couldn't create depth buffer");
+
+  vk::MemoryRequirements mem_reqs =
+      dev.getImageMemoryRequirements(depth_buffer.image_);
+  size_t type_bits = mem_reqs.memoryTypeBits;
+
+  int memory_type_id = -1;
+  vk::PhysicalDeviceMemoryProperties mem_props = phy_dev.getMemoryProperties();
+  for (int i = 0; i < mem_props.memoryTypeCount; ++i, type_bits >>= 1)
+  {
+    if ((type_bits & 1) == 0) continue;
+    if (mem_props.memoryTypes[i].propertyFlags &
+        vk::MemoryPropertyFlagBits::eDeviceLocal)
+    {
+      memory_type_id = i;
+      break;
+    }
+  }
+  CHECK(memory_type_id != -1) << "Couldn't find device local memory";
+
+  vk::MemoryAllocateInfo memory_alloc_info;
+  memory_alloc_info.setAllocationSize(mem_reqs.size)
+      .setMemoryTypeIndex(memory_type_id)
+      .setPNext(nullptr);
+  depth_buffer.memory_ = VkSuccuessOrDie(dev.allocateMemory(memory_alloc_info),
+                                         "Couldn't allocate memory");
+
+  VkSuccuessOrDie(
+      dev.bindImageMemory(depth_buffer.image_, depth_buffer.memory_, 0),
+      "Couldn't bind memory");
+
+  vk::ImageViewCreateInfo view_create_info;
+  view_create_info.setImage(depth_buffer.image_)
+      .setFormat(depth_buffer.format_)
+      .setComponents(vk::ComponentMapping(
+          vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG,
+          vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA))
+      .setSubresourceRange(vk::ImageSubresourceRange(
+          vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1))
+      .setViewType(vk::ImageViewType::e2D)
+      .setFlags(static_cast<vk::ImageViewCreateFlags>(0))
+      .setPNext(nullptr);
+  depth_buffer.view_ = VkSuccuessOrDie(dev.createImageView(view_create_info),
+                                       "Couldn't create image view");
+
+  return depth_buffer;
+}
+
 class VulkanRenderer : public Renderer
 {
  public:
@@ -237,18 +366,94 @@ class VulkanRenderer : public Renderer
     vk_device_ = CreateDevice(phy_dev_, queue_graphics_family_idx_);
     vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_graphics_family_idx_);
 
-    auto buffers = AllocateCommandBuffers(vk_device_, vk_cmd_pool_, 1);
-    vk_swapchain_ = CreateSwapChain(phy_dev_, vk_surface_, vk_device_);
+    vk_swapchain_ =
+        CreateSwapChain(phy_dev_, vk_surface_, vk_device_, &vk_format_);
 
     vk_images_ = VkSuccuessOrDie(
         vk_device_.getSwapchainImagesKHR(vk_swapchain_), "Couldn't get images");
-  }
-  void Render() override {}
 
-  ~VulkanRenderer() final { vk_instance_.destroy(); }
+    vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
+    depth_buffer_ = CreateDepthBuffer(phy_dev_, vk_device_);
+
+    cmd_buffers_ =
+        AllocateCommandBuffers(vk_device_, vk_cmd_pool_, vk_images_.size());
+
+    vk::ClearColorValue color;
+    color.setFloat32({.0, .0, 1., .0});
+
+    vk::ImageSubresourceRange image_range;
+    image_range.setAspectMask(vk::ImageAspectFlagBits::eColor)
+        .setLevelCount(1)
+        .setLayerCount(1);
+
+    vk::CommandBufferBeginInfo cmd_buf_begin_info;
+    cmd_buf_begin_info.setFlags(
+        vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+
+    for (const auto& cmd_buffer : cmd_buffers_)
+    {
+      VkSuccuessOrDie(cmd_buffer.begin(cmd_buf_begin_info),
+                      "Couldn't start command buffer");
+      cmd_buffer.clearColorImage(vk_images_[0], vk::ImageLayout::eGeneral,
+                                 &color, 1, &image_range);
+
+      VkSuccuessOrDie(cmd_buffer.end(), "Couldn't end command buffer");
+    }
+
+    vk_queue_ = vk_device_.getQueue(queue_graphics_family_idx_, 0);
+  }
+
+  void Render() override
+  {
+    uint32_t next_image_idx =
+        VkSuccuessOrDie(vk_device_.acquireNextImageKHR(
+                            vk_swapchain_, std::numeric_limits<uint64_t>::max(),
+                            nullptr, nullptr),
+                        "Couldn't acquire next image");
+    vk::SubmitInfo submit_info;
+    submit_info.setPNext(nullptr).setCommandBufferCount(1).setPCommandBuffers(
+        &cmd_buffers_[next_image_idx]);
+    VkSuccuessOrDie(vk_queue_.submit({submit_info}, nullptr),
+                    "Couldn't submit to the queue");
+
+    vk::PresentInfoKHR present_info;
+    present_info.setSwapchainCount(1)
+        .setPSwapchains(&vk_swapchain_)
+        .setPImageIndices(&next_image_idx);
+    VkSuccuessOrDie(vk_queue_.presentKHR(present_info), "Couldn't present");
+  }
+
+  ~VulkanRenderer() final
+  {
+    vk_device_.freeCommandBuffers(vk_cmd_pool_, cmd_buffers_);
+
+    vk_device_.destroyImageView(depth_buffer_.view_);
+    vk_device_.destroyImage(depth_buffer_.image_);
+    vk_device_.freeMemory(depth_buffer_.memory_);
+
+    for (vk::ImageView& img_view : vk_image_views_)
+    {
+      vk_device_.destroyImageView(img_view);
+    }
+    for (vk::Image& img : vk_images_) vk_device_.destroyImage(img);
+    vk_device_.destroySwapchainKHR(vk_swapchain_);
+
+    vk_device_.destroyCommandPool(vk_cmd_pool_);
+
+    vk_device_.waitIdle();
+    vk_device_.destroy();
+
+    vk_instance_.destroy(vk_surface_);
+    vk_instance_.destroy();
+  }
 
  private:
+  vk::Queue vk_queue_;
+  std::vector<vk::CommandBuffer> cmd_buffers_;
+  DepthBuffer depth_buffer_;
+  std::vector<vk::ImageView> vk_image_views_;
   std::vector<vk::Image> vk_images_;
+  vk::Format vk_format_;
   vk::SwapchainKHR vk_swapchain_;
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
