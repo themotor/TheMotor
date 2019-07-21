@@ -5,6 +5,8 @@
 #include "glog/logging.h"
 #include "motor/render/renderer.h"
 #include "vulkan/vulkan.hpp"
+// NOLINT
+#include "GLFW/glfw3.h"
 
 namespace motor
 {
@@ -29,12 +31,20 @@ vk::Instance CreateInstance()
       .setPEngineName("WUHU")
       .setPNext(nullptr);
 
+  const std::vector<const char*> extensions = {
+      VK_KHR_SURFACE_EXTENSION_NAME,
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+      VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#else
+      VK_KHR_XCB_SURFACE_EXTENSION_NAME,
+#endif
+  };
   vk::InstanceCreateInfo vk_inst_info;
   vk_inst_info.setPApplicationInfo(&app_info)
-      .setEnabledExtensionCount(0)
       .setEnabledLayerCount(0)
-      .setPpEnabledExtensionNames(nullptr)
       .setPpEnabledLayerNames(nullptr)
+      .setEnabledExtensionCount(extensions.size())
+      .setPpEnabledExtensionNames(extensions.data())
       .setFlags(static_cast<vk::InstanceCreateFlags>(0))
       .setPNext(nullptr);
 
@@ -76,6 +86,36 @@ size_t GetGraphicsQueueIdx(const vk::PhysicalDevice& phy_dev)
   return result;
 }
 
+size_t GetPresentQueueIdx(const vk::PhysicalDevice& phy_dev,
+                          const vk::SurfaceKHR& surface)
+{
+  std::vector<vk::QueueFamilyProperties> queue_family_props =
+      phy_dev.getQueueFamilyProperties();
+  CHECK(!queue_family_props.empty()) << "No queues on the device";
+  size_t result = -1;
+  for (size_t i = 0; i < queue_family_props.size(); ++i)
+  {
+    if (VkSuccuessOrDie(phy_dev.getSurfaceSupportKHR(i, surface),
+                        "Couldn't query for KHR support"))
+      result = i;
+  }
+  CHECK(result != -1) << "No queue with present capability";
+  return result;
+}
+
+vk::SurfaceKHR CreateSurface(const vk::Instance& inst)
+{
+  VkSurfaceKHR vk_surface;
+  CHECK(glfwCreateWindowSurface(
+            inst,
+            static_cast<GLFWwindow*>(
+                glfwGetMonitorUserPointer(glfwGetPrimaryMonitor())),
+            nullptr, &vk_surface) == VK_SUCCESS)
+      << "Failed to create surface";
+  CHECK(vk_surface != VK_NULL_HANDLE) << "Null surface";
+  return vk_surface;
+}
+
 vk::Device CreateDevice(const vk::PhysicalDevice& phy_dev,
                         size_t queue_family_idx)
 {
@@ -88,11 +128,12 @@ vk::Device CreateDevice(const vk::PhysicalDevice& phy_dev,
       .setFlags(static_cast<vk::DeviceQueueCreateFlags>(0))
       .setPNext(nullptr);
 
+  const std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
   vk::DeviceCreateInfo create_info;
   create_info.setPQueueCreateInfos(&queue_create_info)
       .setQueueCreateInfoCount(1)
-      .setEnabledExtensionCount(0)
-      .setPpEnabledExtensionNames(nullptr)
+      .setEnabledExtensionCount(extensions.size())
+      .setPpEnabledExtensionNames(extensions.data())
       // Layers are deprecated.
       .setEnabledLayerCount(0)
       .setPpEnabledLayerNames(nullptr)
@@ -132,20 +173,30 @@ class VulkanRenderer : public Renderer
   VulkanRenderer()
   {
     vk_instance_ = CreateInstance();
+    vk_surface_ = CreateSurface(vk_instance_);
     phy_dev_ = SelectPhyiscalDevice(vk_instance_);
-    queue_family_idx_ = GetGraphicsQueueIdx(phy_dev_);
-    vk_device_ = CreateDevice(phy_dev_, queue_family_idx_);
-    vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_family_idx_);
+    queue_graphics_family_idx_ = GetGraphicsQueueIdx(phy_dev_);
+    queue_present_family_idx_ = GetPresentQueueIdx(phy_dev_, vk_surface_);
+    CHECK(queue_graphics_family_idx_ == queue_present_family_idx_)
+        << "Different family indices for present and graphics are not "
+           "supported yet.";
+
+    vk_device_ = CreateDevice(phy_dev_, queue_graphics_family_idx_);
+    vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_graphics_family_idx_);
 
     auto buffers = AllocateCommandBuffers(vk_device_, vk_cmd_pool_, 1);
   }
   void Render() override {}
 
+  ~VulkanRenderer() final { vk_instance_.destroy(); }
+
  private:
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
-  size_t queue_family_idx_;
+  size_t queue_present_family_idx_;
+  size_t queue_graphics_family_idx_;
   vk::PhysicalDevice phy_dev_;
+  vk::SurfaceKHR vk_surface_;
   vk::Instance vk_instance_;
 };
 

@@ -77,6 +77,9 @@ class GLFWWindow : public Window
     glfwSetWindowCloseCallback(handle_, CloseCallback);
 
     InitializeInputs();
+    // TODO(kadircet): This is to enable surface creation in vulkan_renderer,
+    // get rid of this hack at some point...
+    glfwSetMonitorUserPointer(glfwGetPrimaryMonitor(), handle_);
   }
 
   ~GLFWWindow() final

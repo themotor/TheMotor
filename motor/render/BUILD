@@ -15,6 +15,7 @@ cc_library(
     deps = [
         ":renderer",
         "@glog//:glog",
+        "@glfw//:glfw",
         "@vulkan//:vulkan",
     ],
     alwayslink = 1,
