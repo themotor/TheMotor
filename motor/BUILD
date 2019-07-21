@@ -11,8 +11,10 @@ cc_library(
         ":plugin",
         ":window",
         "//motor/input:input",
+        "//motor/render:renderer",
         # Make this a select statement once we have more implementations.
         "//motor/windows:glfw_window",
+        "//motor/render:vulkan_renderer",
         "@glog//:glog",
     ],
 )

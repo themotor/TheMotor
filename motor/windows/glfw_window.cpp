@@ -58,6 +58,13 @@ class GLFWWindow : public Window
   {
     glfwSetErrorCallback(GlfwErrorHandler);
     glfwInit();
+
+    // TODO(kadircet): This shouldn't be disabled if opengl is going to be used.
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    // TODO(kadircet): Handle resize ...
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+    LOG(INFO) << "Window initialized.";
   }
 
   void CreateWindow() override
@@ -66,10 +73,8 @@ class GLFWWindow : public Window
     handle_ = glfwCreateWindow(opts.width_, opts.height_, opts.title_.c_str(),
                                /*monitor=*/nullptr, /*share=*/nullptr);
 
-    glfwMakeContextCurrent(handle_);
     glfwSetWindowUserPointer(handle_, this);
     glfwSetWindowCloseCallback(handle_, CloseCallback);
-    glfwMakeContextCurrent(handle_);
 
     InitializeInputs();
   }
@@ -85,12 +90,6 @@ class GLFWWindow : public Window
     key_inputs_.clear();
     glfwPollEvents();
     BroadcastInputState();
-
-    // TODO(kadircet): Move this into renderer, once we have one ...
-    // Just to check it works, should generate a blue window.
-    glClearColor(0., 0., 1., 1.);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glfwSwapBuffers(handle_);
   }
 
  private:
