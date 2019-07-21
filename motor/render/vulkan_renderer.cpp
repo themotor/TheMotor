@@ -167,6 +167,59 @@ std::vector<vk::CommandBuffer> AllocateCommandBuffers(
                          "Couldn't allocate command buffers");
 }
 
+vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
+                                 const vk::SurfaceKHR& vk_surface,
+                                 const vk::Device& vk_device)
+{
+  std::vector<vk::SurfaceFormatKHR> formats = VkSuccuessOrDie(
+      phy_dev.getSurfaceFormatsKHR(vk_surface), "Couldn't get surface formats");
+  CHECK(!formats.empty()) << "No surface formats";
+  // Surface has no preferences, pick a common format.
+  if (formats[0].format == vk::Format::eUndefined)
+  {
+    formats[0].format = vk::Format::eB8G8R8A8Snorm;
+  }
+
+  vk::SurfaceCapabilitiesKHR surf_caps =
+      VkSuccuessOrDie(phy_dev.getSurfaceCapabilitiesKHR(vk_surface),
+                      "Couldn't get surface capabilities");
+  std::vector<vk::PresentModeKHR> present_modes =
+      VkSuccuessOrDie(phy_dev.getSurfacePresentModesKHR(vk_surface),
+                      "Couldn't get present modes");
+
+  vk::Extent2D swap_chain_extend;
+  // TODO(kadircet): Use values coming from user instead.
+  if (surf_caps.currentExtent.height == 0xFFFFFFFF)
+  {
+    LOG(INFO) << "Current extent unknown setting to 800x600";
+    surf_caps.currentExtent.setHeight(600);
+    surf_caps.currentExtent.setWidth(800);
+  }
+  swap_chain_extend = surf_caps.currentExtent;
+
+  vk::SwapchainCreateInfoKHR swapchain_info;
+  swapchain_info.setSurface(vk_surface)
+      .setImageFormat(formats[0].format)
+      .setMinImageCount(surf_caps.minImageCount)
+      .setImageExtent(swap_chain_extend)
+      // FIFO is supported by all devices.
+      .setPresentMode(vk::PresentModeKHR::eFifo)
+      .setPreTransform(surf_caps.currentTransform)
+      .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eInherit)
+      .setImageArrayLayers(1)
+      .setOldSwapchain(nullptr)
+      .setClipped(true)
+      .setImageColorSpace(vk::ColorSpaceKHR::eSrgbNonlinear)
+      .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
+      .setImageSharingMode(vk::SharingMode::eExclusive)
+      .setQueueFamilyIndexCount(0)
+      .setPQueueFamilyIndices(nullptr)
+      .setPNext(nullptr);
+
+  return VkSuccuessOrDie(vk_device.createSwapchainKHR(swapchain_info),
+                         "Couldn't create swapchain");
+}
+
 class VulkanRenderer : public Renderer
 {
  public:
@@ -185,12 +238,18 @@ class VulkanRenderer : public Renderer
     vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_graphics_family_idx_);
 
     auto buffers = AllocateCommandBuffers(vk_device_, vk_cmd_pool_, 1);
+    vk_swapchain_ = CreateSwapChain(phy_dev_, vk_surface_, vk_device_);
+
+    vk_images_ = VkSuccuessOrDie(
+        vk_device_.getSwapchainImagesKHR(vk_swapchain_), "Couldn't get images");
   }
   void Render() override {}
 
   ~VulkanRenderer() final { vk_instance_.destroy(); }
 
  private:
+  std::vector<vk::Image> vk_images_;
+  vk::SwapchainKHR vk_swapchain_;
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
   size_t queue_present_family_idx_;
