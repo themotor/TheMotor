@@ -22,9 +22,9 @@ class Engine
   void MainLoop();
 
  private:
-  std::unique_ptr<Window> window_manager_;
-  std::unique_ptr<Renderer> renderer_;
   std::atomic<bool> is_running_ = false;
+  std::unique_ptr<Renderer> renderer_;
+  std::unique_ptr<Window> window_manager_;
 };
 }  // namespace motor
 
