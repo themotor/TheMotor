@@ -27,3 +27,11 @@ http_archive(
     ],
     sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
 )
+
+http_archive(
+    name = "vulkan",
+    url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/v1.1.115.tar.gz",
+    strip_prefix = "Vulkan-Headers-1.1.115",
+    sha256 = "9298c9a591ecbfbe399b659eac2ae0ee8845601235859a741f38ced1a8144fe3",
+    build_file = "BUILD.vulkan",
+)
