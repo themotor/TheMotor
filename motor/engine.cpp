@@ -3,6 +3,9 @@
 #include "event.h"
 #include "glog/logging.h"
 #include "input/input.h"
+#include "motor/event.h"
+#include "motor/render/renderer.h"
+#include "motor/window.h"
 #include "window.h"
 
 namespace motor
@@ -46,9 +49,11 @@ void Engine::InitializeWindow(WindowOptions opts)
 
 void Engine::MainLoop()
 {
+  renderer_ = RenderPlugin::Create();
   while (is_running_)
   {
     window_manager_->Update();
+    renderer_->Render();
   }
 }
 

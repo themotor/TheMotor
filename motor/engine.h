@@ -4,7 +4,8 @@
 #include <atomic>
 #include <memory>
 
-#include "window.h"
+#include "motor/render/renderer.h"
+#include "motor/window.h"
 
 namespace motor
 {
@@ -22,6 +23,7 @@ class Engine
 
  private:
   std::unique_ptr<Window> window_manager_;
+  std::unique_ptr<Renderer> renderer_;
   std::atomic<bool> is_running_ = false;
 };
 }  // namespace motor
