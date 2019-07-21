@@ -436,7 +436,7 @@ class VulkanRenderer : public Renderer
     {
       vk_device_.destroyImageView(img_view);
     }
-    for (vk::Image& img : vk_images_) vk_device_.destroyImage(img);
+    // This also destroys all of the vk_image_ handles
     vk_device_.destroySwapchainKHR(vk_swapchain_);
 
     vk_device_.destroyCommandPool(vk_cmd_pool_);
