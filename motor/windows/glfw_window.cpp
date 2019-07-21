@@ -66,6 +66,7 @@ class GLFWWindow : public Window
     handle_ = glfwCreateWindow(opts.width_, opts.height_, opts.title_.c_str(),
                                /*monitor=*/nullptr, /*share=*/nullptr);
 
+    glfwMakeContextCurrent(handle_);
     glfwSetWindowUserPointer(handle_, this);
     glfwSetWindowCloseCallback(handle_, CloseCallback);
     glfwMakeContextCurrent(handle_);
