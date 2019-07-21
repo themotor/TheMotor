@@ -1,6 +1,7 @@
 #ifndef _MOTOR_PLUGIN_H_
 #define _MOTOR_PLUGIN_H_
 
+#include <cassert>
 #include <memory>
 #include <type_traits>
 
