@@ -28,7 +28,9 @@ void InputStateHandler(const input::InputStateBroadcast& state)
 void Engine::InitializeWindow(WindowOptions opts)
 {
   is_running_ = true;
-  window_manager_ = WindowPlugin::CreateWindow(std::move(opts));
+  window_manager_ = WindowPlugin::Create();
+  window_manager_->SetOptions(std::move(opts));
+  window_manager_->CreateWindow();
 
   Event::Handler<WindowClose> close_handler =
       [this](const WindowClose& /*unused*/) {

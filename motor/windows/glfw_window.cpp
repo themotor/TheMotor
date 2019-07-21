@@ -54,20 +54,21 @@ void AppendGamepadStates(input::InputStateBroadcast* broadcast)
 class GLFWWindow : public Window
 {
  public:
-  explicit GLFWWindow(WindowOptions opts) : opts_(std::move(opts))
+  GLFWWindow()
   {
     glfwSetErrorCallback(GlfwErrorHandler);
     glfwInit();
-    handle_ =
-        glfwCreateWindow(opts_.width_, opts_.height_, opts_.title_.c_str(),
-                         /*monitor=*/nullptr, /*share=*/nullptr);
+  }
+
+  void CreateWindow() override
+  {
+    const WindowOptions& opts = GetOptions();
+    handle_ = glfwCreateWindow(opts.width_, opts.height_, opts.title_.c_str(),
+                               /*monitor=*/nullptr, /*share=*/nullptr);
 
     glfwSetWindowUserPointer(handle_, this);
-    // To fetch class pointer in joystick callbacks.
-    glfwSetMonitorUserPointer(glfwGetPrimaryMonitor(), this);
-
-    glfwMakeContextCurrent(handle_);
     glfwSetWindowCloseCallback(handle_, CloseCallback);
+    glfwMakeContextCurrent(handle_);
 
     InitializeInputs();
   }
@@ -92,7 +93,6 @@ class GLFWWindow : public Window
   }
 
  private:
-  WindowOptions opts_;
   // Unfortunately we can't use a unique_ptr here, because glfw headers only
   // forward declares GLFWwindow.
   GLFWwindow* handle_;
