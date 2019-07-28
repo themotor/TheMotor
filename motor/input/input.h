@@ -25,7 +25,7 @@ struct KeyInput
   DeviceType device_id_ = UNKNOWN_DEVICE;
   // TODO(kadircet): Come up with an enum for these.
   int id_ = 0;
-  bool is_pressed_ = false;
+  bool is_down_ = false;
 };
 
 struct AxisInput
