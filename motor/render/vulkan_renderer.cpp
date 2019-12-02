@@ -345,6 +345,38 @@ std::vector<vk::ImageView> CreateImageViews(
   return image_views;
 }
 
+vk::RenderPass CreateRenderPass(const vk::Device& vk_dev,
+                                const vk::Format& vk_format)
+{
+  vk::AttachmentDescription color_attachment;
+  color_attachment.setFormat(vk_format)
+      .setSamples(vk::SampleCountFlagBits::e1)
+      .setLoadOp(vk::AttachmentLoadOp::eClear)
+      .setStoreOp(vk::AttachmentStoreOp::eStore)
+      .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setInitialLayout(vk::ImageLayout::eUndefined)
+      .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+  vk::AttachmentReference color_attachment_ref;
+  color_attachment_ref.setAttachment(0).setLayout(
+      vk::ImageLayout::eColorAttachmentOptimal);
+
+  vk::SubpassDescription subpass;
+  subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+      .setColorAttachmentCount(1)
+      .setPColorAttachments(&color_attachment_ref);
+
+  vk::RenderPassCreateInfo render_pass_info;
+  render_pass_info.setAttachmentCount(1)
+      .setPAttachments(&color_attachment)
+      .setSubpassCount(1)
+      .setPSubpasses(&subpass);
+
+  return VkSuccuessOrDie(vk_dev.createRenderPass(render_pass_info),
+                         "Couldn't create Render Pass!");
+}
+
 DepthBuffer CreateDepthBuffer(const vk::PhysicalDevice& phy_dev,
                               const vk::Device& dev)
 {
@@ -454,11 +486,13 @@ class VulkanRenderer : public Renderer
         CreateSwapChain(phy_dev_, vk_surface_, vk_device_, &vk_format_);
     vk_images_ = VkSuccuessOrDie(
         vk_device_.getSwapchainImagesKHR(vk_swapchain_), "Couldn't get images");
-        
+
+    vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
+    vk_render_pass_ = CreateRenderPass(vk_device_, vk_format_);
+
     vk_cmd_pool_ = CreateCommandPool(vk_device_,
                                      queue_indices_.graphics_queue_idx.value());
 
-    vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
     depth_buffer_ = CreateDepthBuffer(phy_dev_, vk_device_);
 
     cmd_buffers_ =
@@ -543,6 +577,7 @@ class VulkanRenderer : public Renderer
   std::vector<vk::Image> vk_images_;
   vk::Format vk_format_;
   vk::SwapchainKHR vk_swapchain_;
+  vk::RenderPass vk_render_pass_;
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
   QueueFamilyIndices queue_indices_;
