@@ -450,14 +450,13 @@ class VulkanRenderer : public Renderer
            "supported yet.";
     vk_device_ =
         CreateDevice(phy_dev_, queue_indices_.graphics_queue_idx.value());
-    vk_cmd_pool_ = CreateCommandPool(vk_device_,
-                                     queue_indices_.graphics_queue_idx.value());
-
     vk_swapchain_ =
         CreateSwapChain(phy_dev_, vk_surface_, vk_device_, &vk_format_);
-
     vk_images_ = VkSuccuessOrDie(
         vk_device_.getSwapchainImagesKHR(vk_swapchain_), "Couldn't get images");
+        
+    vk_cmd_pool_ = CreateCommandPool(vk_device_,
+                                     queue_indices_.graphics_queue_idx.value());
 
     vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
     depth_buffer_ = CreateDepthBuffer(phy_dev_, vk_device_);
