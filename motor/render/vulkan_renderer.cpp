@@ -624,31 +624,56 @@ class VulkanRenderer : public Renderer
       in_flight_fences_[i] = VkSuccuessOrDie(vk_device_.createFence(fence_info),
                                             "Couldn't create fence info");
     }
+
+    frame_count_ = 0;
   }
 
   void Render() override
   {
+    vk_device_.waitForFences(1, &in_flight_fences_[frame_count_], VK_TRUE,
+                             std::numeric_limits<uint64_t>::max());
+    vk_device_.resetFences(1, &in_flight_fences_[frame_count_]);
+
     uint32_t next_image_idx =
         VkSuccuessOrDie(vk_device_.acquireNextImageKHR(
                             vk_swapchain_, std::numeric_limits<uint64_t>::max(),
-                            nullptr, nullptr),
+                            image_available_semaphores_[frame_count_], nullptr),
                         "Couldn't acquire next image");
+    vk::PipelineStageFlags wait_stages[] = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput};
     vk::SubmitInfo submit_info;
-    submit_info.setPNext(nullptr).setCommandBufferCount(1).setPCommandBuffers(
-        &cmd_buffers_[next_image_idx]);
+    submit_info.setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(&image_available_semaphores_[frame_count_])
+        .setPWaitDstStageMask(wait_stages)
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&cmd_buffers_[next_image_idx])
+        .setSignalSemaphoreCount(1)
+        .setPSignalSemaphores(&render_finished_semaphores_[frame_count_]);
+
     VkSuccuessOrDie(vk_queue_.submit({submit_info}, nullptr),
                     "Couldn't submit to the queue");
 
     vk::PresentInfoKHR present_info;
-    present_info.setSwapchainCount(1)
+    present_info.setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(&render_finished_semaphores_[frame_count_])
+        .setSwapchainCount(1)
         .setPSwapchains(&vk_swapchain_)
         .setPImageIndices(&next_image_idx);
     VkSuccuessOrDie(vk_queue_.presentKHR(present_info), "Couldn't present");
+    frame_count_ = (frame_count_ + 1) % kMaxFramesInFlight;
   }
 
   ~VulkanRenderer() final
   {
     vk_device_.freeCommandBuffers(vk_cmd_pool_, cmd_buffers_);
+    vk_device_.destroyCommandPool(vk_cmd_pool_);
+    for (auto framebuffer : vk_swaphain_framebuffers_)
+    {
+      vk_device_.destroyFramebuffer(framebuffer);
+    }
+    vk_device_.destroyPipeline(vk_graphics_pipeline_);
+    vk_device_.destroyPipelineLayout(vk_pipeline_layout_);
+    vk_device_.destroyRenderPass(vk_render_pass_);
 
     for (vk::ImageView& img_view : vk_image_views_)
     {
@@ -656,8 +681,6 @@ class VulkanRenderer : public Renderer
     }
     // This also destroys all of the vk_image_ handles
     vk_device_.destroySwapchainKHR(vk_swapchain_);
-
-    vk_device_.destroyCommandPool(vk_cmd_pool_);
 
     vk_device_.waitIdle();
     vk_device_.destroy();
@@ -667,6 +690,7 @@ class VulkanRenderer : public Renderer
   }
 
  private:
+  uint32_t frame_count_;
   std::vector<vk::Semaphore> image_available_semaphores_;
   std::vector<vk::Semaphore> render_finished_semaphores_;
   std::vector<vk::Fence> in_flight_fences_;
