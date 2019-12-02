@@ -1,6 +1,8 @@
 #include <bits/stdint-uintn.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <fstream>
 #include <limits>
 #include <set>
 #include <tuple>
