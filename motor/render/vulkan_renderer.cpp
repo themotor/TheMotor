@@ -18,6 +18,8 @@ namespace motor
 {
 namespace
 {
+constexpr int kMaxFramesInFlight = 2;
+
 template <typename T>
 T VkSuccuessOrDie(vk::ResultValue<T> res_and_val, const char* desc)
 {
@@ -602,6 +604,26 @@ class VulkanRenderer : public Renderer
       VkSuccuessOrDie(cmd_buffers_[i].end(),
                       "Couldn't end recording of command buffer");
     }
+
+    // Create Semaphores and Fences
+    vk::SemaphoreCreateInfo semaphore_info;
+    vk::FenceCreateInfo fence_info;
+    fence_info.setFlags(vk::FenceCreateFlagBits::eSignaled);
+
+    image_available_semaphores_.resize(kMaxFramesInFlight);
+    render_finished_semaphores_.resize(kMaxFramesInFlight);
+    in_flight_fences_.resize(kMaxFramesInFlight);
+    for (int i = 0; i < kMaxFramesInFlight; i++)
+    {
+      image_available_semaphores_[i] =
+          VkSuccuessOrDie(vk_device_.createSemaphore(semaphore_info),
+                          "Failed to create image_available semaphore");
+      render_finished_semaphores_[i] =
+          VkSuccuessOrDie(vk_device_.createSemaphore(semaphore_info),
+                          "Failed to create render_finished semaphore");
+      in_flight_fences_[i] = VkSuccuessOrDie(vk_device_.createFence(fence_info),
+                                            "Couldn't create fence info");
+    }
   }
 
   void Render() override
@@ -645,6 +667,9 @@ class VulkanRenderer : public Renderer
   }
 
  private:
+  std::vector<vk::Semaphore> image_available_semaphores_;
+  std::vector<vk::Semaphore> render_finished_semaphores_;
+  std::vector<vk::Fence> in_flight_fences_;
   vk::Queue vk_queue_;
   std::vector<vk::CommandBuffer> cmd_buffers_;
   std::vector<vk::ImageView> vk_image_views_;
