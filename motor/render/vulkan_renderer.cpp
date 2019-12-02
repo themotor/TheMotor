@@ -1,5 +1,6 @@
 #include <bits/stdint-uintn.h>
 
+#include <set>
 #include <cstddef>
 #include <limits>
 #include <tuple>
@@ -36,6 +37,96 @@ struct DepthBuffer
   vk::ImageView view_;
 };
 
+struct QueueFamilyIndices
+{
+  std::optional<size_t> graphics_queue_idx;
+  std::optional<size_t> present_queue_idx;
+
+  bool isComplete()
+  {
+    return graphics_queue_idx.has_value() && present_queue_idx.has_value();
+  }
+};
+
+std::vector<const char*> GetRequiredExtensions()
+{
+  std::vector<const char*> extensions;
+  uint32_t glfw_extension_count = 0;
+  const char** glfw_extensions =
+      glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+  CHECK(glfw_extensions) << "Vulkan is not supported on the machine";
+  extensions.resize(glfw_extension_count);
+  std::copy(glfw_extensions, glfw_extensions + glfw_extension_count,
+            extensions.begin());
+
+  return extensions;
+}
+
+QueueFamilyIndices GetQueueIndices(const vk::PhysicalDevice& phy_dev,
+                                   const vk::SurfaceKHR& surface)
+{
+  QueueFamilyIndices indices;
+  std::vector<vk::QueueFamilyProperties> queue_family_props =
+      phy_dev.getQueueFamilyProperties();
+  CHECK(!queue_family_props.empty()) << "No queues on the device";
+
+  for (size_t i = 0; i < queue_family_props.size(); ++i)
+  {
+    const auto& family_prop = queue_family_props[i];
+    if (family_prop.queueCount &&
+        family_prop.queueFlags & vk::QueueFlagBits::eGraphics)
+    {
+      indices.graphics_queue_idx = i;
+    }
+    if (VkSuccuessOrDie(phy_dev.getSurfaceSupportKHR(i, surface),
+                        "Couldn't query for KHR support"))
+    {
+      indices.present_queue_idx = i;
+    }
+  }
+  return indices;
+}
+
+bool CheckExtensionSupport(const vk::PhysicalDevice& phy_dev)
+{
+  std::vector<vk::ExtensionProperties> available_extensions =
+      VkSuccuessOrDie(phy_dev.enumerateDeviceExtensionProperties(),
+                      "Coudn't get device extensions");
+  // device_extensions is also used when creating logical device, maybe move it
+  // to global? Or maybe make these functions part of the VulkanRenderer class?
+  const std::vector<const char*> device_extensions = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  std::set<std::string> required_ext(device_extensions.begin(),
+                                     device_extensions.end());
+  for (const auto& extension : available_extensions)
+  {
+    required_ext.erase(extension.extensionName);
+  }
+  return required_ext.empty();
+}
+
+bool CheckSwapchainSupport(const vk::PhysicalDevice& phy_dev,
+                           const vk::SurfaceKHR& surface)
+{
+  std::vector<vk::SurfaceFormatKHR> formats = VkSuccuessOrDie(
+      phy_dev.getSurfaceFormatsKHR(surface), "Couldn't get surface formats");
+  std::vector<vk::PresentModeKHR> present_modes = VkSuccuessOrDie(
+      phy_dev.getSurfacePresentModesKHR(surface), "Couldn't get present modes");
+  return !formats.empty() && !present_modes.empty();
+}
+
+bool isSuitableDevice(const vk::PhysicalDevice& phy_dev,
+                      const vk::SurfaceKHR& surface)
+{
+  QueueFamilyIndices queue_indices = GetQueueIndices(phy_dev, surface);
+  if (!queue_indices.isComplete()) return false;
+  bool isExtensionsSupported = CheckExtensionSupport(phy_dev);
+  if (!isExtensionsSupported) return false;
+  bool isSwapchainOk = CheckSwapchainSupport(phy_dev, surface);
+  if (!isSwapchainOk) return false;
+  return true;
+}
+
 vk::Instance CreateInstance()
 {
   // TODO(kadircet): Some of the following should come from an options struct.
@@ -47,14 +138,7 @@ vk::Instance CreateInstance()
       .setPEngineName("WUHU")
       .setPNext(nullptr);
 
-  const std::vector<const char*> extensions = {
-      VK_KHR_SURFACE_EXTENSION_NAME,
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-      VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-#else
-      VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-#endif
-  };
+  const std::vector<const char*> extensions = GetRequiredExtensions();
   vk::InstanceCreateInfo vk_inst_info;
   vk_inst_info.setPApplicationInfo(&app_info)
       .setEnabledLayerCount(0)
@@ -68,55 +152,27 @@ vk::Instance CreateInstance()
                          "Couldn't createInstance");
 }
 
-vk::PhysicalDevice SelectPhyiscalDevice(const vk::Instance& vk_inst)
+vk::PhysicalDevice SelectPhyiscalDevice(const vk::Instance& vk_inst,
+                                        const vk::SurfaceKHR& surface)
 {
   std::vector<vk::PhysicalDevice> devices = VkSuccuessOrDie(
       vk_inst.enumeratePhysicalDevices(), "Couldn't enumeratePhysicalDevices");
   CHECK(!devices.empty()) << "No vulkan device found";
-
+  vk::PhysicalDevice suitable_device;
   for (const vk::PhysicalDevice& phy_dev : devices)
   {
     const vk::PhysicalDeviceProperties props = phy_dev.getProperties();
     LOG(INFO) << "Found device: " << props.deviceName
               << " api: " << props.apiVersion
               << " driver: " << props.driverVersion;
+    if (isSuitableDevice(phy_dev, surface))
+    {
+      suitable_device = phy_dev;
+      // TODO(hbostann): If we don't want to list all devices, maybe break the
+      // loop on first suitable device?
+    }
   }
-  // TODO(kadircet): I suppose we'll need a more clever selection logic.
-  return devices.front();
-}
-
-size_t GetGraphicsQueueIdx(const vk::PhysicalDevice& phy_dev)
-{
-  std::vector<vk::QueueFamilyProperties> queue_family_props =
-      phy_dev.getQueueFamilyProperties();
-  CHECK(!queue_family_props.empty()) << "No queues on the device";
-  size_t result = -1;
-  for (int i = 0; i < queue_family_props.size(); ++i)
-  {
-    const auto& family_prop = queue_family_props[i];
-    LOG(INFO) << "Queue: " << family_prop.queueCount << ' '
-              << static_cast<unsigned>(family_prop.queueFlags);
-    if (family_prop.queueFlags & vk::QueueFlagBits::eGraphics) result = i;
-  }
-  CHECK(result != -1) << "No queue with a graphics flag";
-  return result;
-}
-
-size_t GetPresentQueueIdx(const vk::PhysicalDevice& phy_dev,
-                          const vk::SurfaceKHR& surface)
-{
-  std::vector<vk::QueueFamilyProperties> queue_family_props =
-      phy_dev.getQueueFamilyProperties();
-  CHECK(!queue_family_props.empty()) << "No queues on the device";
-  size_t result = -1;
-  for (size_t i = 0; i < queue_family_props.size(); ++i)
-  {
-    if (VkSuccuessOrDie(phy_dev.getSurfaceSupportKHR(i, surface),
-                        "Couldn't query for KHR support"))
-      result = i;
-  }
-  CHECK(result != -1) << "No queue with present capability";
-  return result;
+  return suitable_device;
 }
 
 vk::SurfaceKHR CreateSurface(const vk::Instance& inst)
@@ -356,15 +412,16 @@ class VulkanRenderer : public Renderer
   {
     vk_instance_ = CreateInstance();
     vk_surface_ = CreateSurface(vk_instance_);
-    phy_dev_ = SelectPhyiscalDevice(vk_instance_);
-    queue_graphics_family_idx_ = GetGraphicsQueueIdx(phy_dev_);
-    queue_present_family_idx_ = GetPresentQueueIdx(phy_dev_, vk_surface_);
-    CHECK(queue_graphics_family_idx_ == queue_present_family_idx_)
+    phy_dev_ = SelectPhyiscalDevice(vk_instance_, vk_surface_);
+    queue_indices_ = GetQueueIndices(phy_dev_, vk_surface_);
+    CHECK(queue_indices_.isComplete())
+        << "Can't find one or more queue indices";
+    CHECK(queue_indices_.graphics_queue_idx.value() ==
+          queue_indices_.present_queue_idx.value())
         << "Different family indices for present and graphics are not "
            "supported yet.";
-
-    vk_device_ = CreateDevice(phy_dev_, queue_graphics_family_idx_);
-    vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_graphics_family_idx_);
+    vk_device_ = CreateDevice(phy_dev_, queue_indices_.graphics_queue_idx.value());
+    vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_indices_.graphics_queue_idx.value());
 
     vk_swapchain_ =
         CreateSwapChain(phy_dev_, vk_surface_, vk_device_, &vk_format_);
@@ -401,7 +458,7 @@ class VulkanRenderer : public Renderer
       VkSuccuessOrDie(cmd_buffer.end(), "Couldn't end command buffer");
     }
 
-    vk_queue_ = vk_device_.getQueue(queue_graphics_family_idx_, 0);
+    vk_queue_ = vk_device_.getQueue(queue_indices_.graphics_queue_idx.value(), 0);
   }
 
   void Render() override
@@ -458,8 +515,7 @@ class VulkanRenderer : public Renderer
   vk::SwapchainKHR vk_swapchain_;
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
-  size_t queue_present_family_idx_;
-  size_t queue_graphics_family_idx_;
+  QueueFamilyIndices queue_indices_;
   vk::PhysicalDevice phy_dev_;
   vk::SurfaceKHR vk_surface_;
   vk::Instance vk_instance_;
