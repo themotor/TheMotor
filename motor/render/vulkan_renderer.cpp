@@ -1,8 +1,8 @@
 #include <bits/stdint-uintn.h>
 
-#include <set>
 #include <cstddef>
 #include <limits>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -248,6 +248,8 @@ vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
       phy_dev.getSurfaceFormatsKHR(vk_surface), "Couldn't get surface formats");
   CHECK(!formats.empty()) << "No surface formats";
   // Surface has no preferences, pick a common format.
+  // TODO(hbostann): Implement a better selection preferring surface formats
+  // with vk::Format::eB8G8R8A8Snorm and vk::ColorSpaceKHR::eSrgbNonlinear
   if (formats[0].format == vk::Format::eUndefined)
   {
     formats[0].format = vk::Format::eB8G8R8A8Snorm;
@@ -261,33 +263,59 @@ vk::SwapchainKHR CreateSwapChain(const vk::PhysicalDevice& phy_dev,
       VkSuccuessOrDie(phy_dev.getSurfacePresentModesKHR(vk_surface),
                       "Couldn't get present modes");
 
-  vk::Extent2D swap_chain_extend;
+  vk::Extent2D swap_chain_extent;
   // TODO(kadircet): Use values coming from user instead.
-  if (surf_caps.currentExtent.height == 0xFFFFFFFF)
+  if (surf_caps.currentExtent.height == UINT32_MAX)
   {
     LOG(INFO) << "Current extent unknown setting to 800x600";
-    surf_caps.currentExtent.setHeight(600);
-    surf_caps.currentExtent.setWidth(800);
+    uint32_t width = 800;
+    uint32_t height = 600;
+    surf_caps.currentExtent.setWidth(
+        std::max(surf_caps.minImageExtent.width,
+                 std::min(surf_caps.maxImageExtent.width, width)));
+    surf_caps.currentExtent.setHeight(
+        std::max(surf_caps.minImageExtent.height,
+                 std::min(surf_caps.maxImageExtent.height, height)));
   }
-  swap_chain_extend = surf_caps.currentExtent;
+  swap_chain_extent = surf_caps.currentExtent;
+
+  uint32_t image_count = surf_caps.minImageCount + 1;
+  if (surf_caps.maxImageCount > 0 && image_count > surf_caps.maxImageCount)
+  {
+    image_count = surf_caps.maxImageCount;
+  }
+
+  // FIFO is supported by all devices.
+  vk::PresentModeKHR present_mode = vk::PresentModeKHR::eFifo;
+  for (const auto& available_present_mode : present_modes)
+  {
+    if (available_present_mode == vk::PresentModeKHR::eMailbox)
+    {
+      present_mode = available_present_mode;
+    }
+  }
 
   vk::SwapchainCreateInfoKHR swapchain_info;
   swapchain_info.setSurface(vk_surface)
+      .setMinImageCount(image_count)
       .setImageFormat(formats[0].format)
-      .setMinImageCount(surf_caps.minImageCount)
-      .setImageExtent(swap_chain_extend)
-      // FIFO is supported by all devices.
-      .setPresentMode(vk::PresentModeKHR::eFifo)
-      .setPreTransform(surf_caps.currentTransform)
-      .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eInherit)
-      .setImageArrayLayers(1)
-      .setOldSwapchain(nullptr)
-      .setClipped(true)
       .setImageColorSpace(vk::ColorSpaceKHR::eSrgbNonlinear)
+      .setImageExtent(swap_chain_extent)
+      .setImageArrayLayers(1)
       .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
       .setImageSharingMode(vk::SharingMode::eExclusive)
+      // TODO(hbostann): Handle cases where graphics family and present family
+      // indexes are different
+      //                  - Make ImageSharingMode = vk::SharingMode::eConcurrent
+      //                  - Fill in QueueFamilyIndexCount and
+      //                  PQueueFamilyIndices
       .setQueueFamilyIndexCount(0)
       .setPQueueFamilyIndices(nullptr)
+      .setPreTransform(surf_caps.currentTransform)
+      .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eInherit)
+      .setPresentMode(present_mode)
+      .setClipped(true)
+      .setOldSwapchain(nullptr)
       .setPNext(nullptr);
 
   return VkSuccuessOrDie(vk_device.createSwapchainKHR(swapchain_info),
@@ -420,14 +448,15 @@ class VulkanRenderer : public Renderer
           queue_indices_.present_queue_idx.value())
         << "Different family indices for present and graphics are not "
            "supported yet.";
-    vk_device_ = CreateDevice(phy_dev_, queue_indices_.graphics_queue_idx.value());
-    vk_cmd_pool_ = CreateCommandPool(vk_device_, queue_indices_.graphics_queue_idx.value());
-
+    vk_device_ =
+        CreateDevice(phy_dev_, queue_indices_.graphics_queue_idx.value());
     vk_swapchain_ =
         CreateSwapChain(phy_dev_, vk_surface_, vk_device_, &vk_format_);
-
     vk_images_ = VkSuccuessOrDie(
         vk_device_.getSwapchainImagesKHR(vk_swapchain_), "Couldn't get images");
+        
+    vk_cmd_pool_ = CreateCommandPool(vk_device_,
+                                     queue_indices_.graphics_queue_idx.value());
 
     vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
     depth_buffer_ = CreateDepthBuffer(phy_dev_, vk_device_);
@@ -458,7 +487,8 @@ class VulkanRenderer : public Renderer
       VkSuccuessOrDie(cmd_buffer.end(), "Couldn't end command buffer");
     }
 
-    vk_queue_ = vk_device_.getQueue(queue_indices_.graphics_queue_idx.value(), 0);
+    vk_queue_ =
+        vk_device_.getQueue(queue_indices_.graphics_queue_idx.value(), 0);
   }
 
   void Render() override
