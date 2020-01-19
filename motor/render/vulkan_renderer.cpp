@@ -1,6 +1,8 @@
 #include <bits/stdint-uintn.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <fstream>
 #include <limits>
 #include <set>
 #include <tuple>
@@ -377,6 +379,141 @@ vk::RenderPass CreateRenderPass(const vk::Device& vk_dev,
                          "Couldn't create Render Pass!");
 }
 
+vk::PipelineLayout CreatePipelineLayout(const vk::Device& vk_dev)
+{
+  vk::PipelineLayoutCreateInfo pipeline_layout_info;
+  pipeline_layout_info.setSetLayoutCount(0).setPushConstantRangeCount(0);
+  return VkSuccuessOrDie(vk_dev.createPipelineLayout(pipeline_layout_info),
+                         "Couldn't create Pipeline Layout!");
+}
+
+// Move this function/Create similar function in a different part of the engine
+std::vector<char> ReadFile(const std::string& filename)
+{
+  // Maybe making this function return char[] is better?
+  std::ifstream f(filename, std::ios::ate | std::ios::binary);
+  CHECK(f.is_open()) << "Failed to open file: " << filename;
+  size_t file_size = f.tellg();
+  std::vector<char> buf(file_size);
+  f.seekg(0);
+  f.read(buf.data(), file_size);
+  f.close();
+  return buf;
+}
+
+vk::ShaderModule CreateShaderModuleFromShaderFile(const vk::Device vk_dev,
+                                                  const std::string& filename)
+{
+  auto shader_code = ReadFile(filename);
+  vk::ShaderModuleCreateInfo shader_module_info;
+  shader_module_info.setCodeSize(shader_code.size())
+      .setPCode(reinterpret_cast<const uint32_t*>(shader_code.data()));
+  return VkSuccuessOrDie(vk_dev.createShaderModule(shader_module_info),
+                         "Couldn't create shader.");
+}
+
+std::vector<vk::PipelineShaderStageCreateInfo> CreateShaderStages(
+    const vk::Device vk_dev)
+{
+  vk::ShaderModule vertex_shader_module =
+      CreateShaderModuleFromShaderFile(vk_dev, "src/shaders/vert.spv");
+  vk::ShaderModule fragment_shader_module =
+      CreateShaderModuleFromShaderFile(vk_dev, "src/shaders/frag.spv");
+  std::vector<vk::PipelineShaderStageCreateInfo> shader_stages;
+  shader_stages.push_back(vk::PipelineShaderStageCreateInfo()
+                              .setStage(vk::ShaderStageFlagBits::eVertex)
+                              .setModule(vertex_shader_module)
+                              .setPName("main"));
+  shader_stages.push_back(vk::PipelineShaderStageCreateInfo()
+                              .setStage(vk::ShaderStageFlagBits::eFragment)
+                              .setModule(fragment_shader_module)
+                              .setPName("main"));
+  return shader_stages;
+}
+
+vk::Pipeline CreateGraphicsPipeline(
+    const vk::Device& vk_dev, const vk::PipelineLayout& vk_pipeline_layout,
+    const vk::RenderPass& vk_render_pass)
+{
+  std::vector<vk::PipelineShaderStageCreateInfo> shader_stages;
+  shader_stages = CreateShaderStages(vk_dev);
+
+  vk::PipelineVertexInputStateCreateInfo vertex_input_state_info;
+  vertex_input_state_info.setVertexBindingDescriptionCount(0)
+      .setVertexAttributeDescriptionCount(0);
+
+  vk::PipelineInputAssemblyStateCreateInfo input_assembly_state_info;
+  input_assembly_state_info.setTopology(vk::PrimitiveTopology::eTriangleList)
+      .setPrimitiveRestartEnable(VK_FALSE);
+
+  // TODO(hbostann): Get Width and Height from swapchain extent
+  vk::Viewport viewport;
+  viewport.setX(0.0f)
+      .setY(0.0f)
+      .setWidth(800.0f)
+      .setHeight(600.0f)
+      .setMinDepth(0.0f)
+      .setMaxDepth(1.0f);
+
+  // TODO(hbostann): Get Width and Height from swapchain extent
+  vk::Rect2D scissor;
+  scissor.setOffset(vk::Offset2D(0, 0)).setExtent(vk::Extent2D(800, 600));
+
+  vk::PipelineViewportStateCreateInfo viewport_state_info;
+  viewport_state_info.setViewportCount(1)
+      .setPViewports(&viewport)
+      .setScissorCount(1)
+      .setPScissors(&scissor);
+
+  vk::PipelineRasterizationStateCreateInfo rasterization_state_info;
+  rasterization_state_info.setDepthClampEnable(VK_FALSE)
+      .setRasterizerDiscardEnable(VK_FALSE)
+      .setPolygonMode(vk::PolygonMode::eFill)
+      .setLineWidth(1.0f)
+      .setCullMode(vk::CullModeFlagBits::eBack)
+      .setFrontFace(vk::FrontFace::eClockwise)
+      .setDepthBiasEnable(VK_FALSE);
+
+  vk::PipelineMultisampleStateCreateInfo multisample_state_info;
+  multisample_state_info.setSampleShadingEnable(VK_FALSE)
+      .setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+  vk::PipelineColorBlendAttachmentState colorblend_attachment_state;
+  colorblend_attachment_state
+      .setColorWriteMask(
+          vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+      .setBlendEnable(VK_FALSE);
+
+  vk::PipelineColorBlendStateCreateInfo colorblend_state_info;
+  colorblend_state_info.setLogicOpEnable(VK_FALSE)
+      .setLogicOp(vk::LogicOp::eCopy)
+      .setAttachmentCount(1)
+      .setPAttachments(&colorblend_attachment_state)
+      .setBlendConstants({0.0f, 0.0f, 0.0f, 0.0f});
+
+  vk::GraphicsPipelineCreateInfo graphics_pipeline_info;
+  graphics_pipeline_info.setStageCount(2)
+      .setPStages(shader_stages.data())
+      .setPVertexInputState(&vertex_input_state_info)
+      .setPInputAssemblyState(&input_assembly_state_info)
+      .setPViewportState(&viewport_state_info)
+      .setPRasterizationState(&rasterization_state_info)
+      .setPMultisampleState(&multisample_state_info)
+      .setPColorBlendState(&colorblend_state_info)
+      .setLayout(vk_pipeline_layout)
+      .setRenderPass(vk_render_pass)
+      .setSubpass(0)
+      .setBasePipelineHandle(nullptr);
+
+  vk::Pipeline graphics_pipeline = VkSuccuessOrDie(
+      vk_dev.createGraphicsPipeline(nullptr, graphics_pipeline_info),
+      "Couldn't create Graphics Pipeline");
+  // Might need to destroy shader modules here.
+
+  return graphics_pipeline;
+}
+
 DepthBuffer CreateDepthBuffer(const vk::PhysicalDevice& phy_dev,
                               const vk::Device& dev)
 {
@@ -489,7 +626,9 @@ class VulkanRenderer : public Renderer
 
     vk_image_views_ = CreateImageViews(vk_device_, vk_images_, vk_format_);
     vk_render_pass_ = CreateRenderPass(vk_device_, vk_format_);
-
+    vk_pipeline_layout_ = CreatePipelineLayout(vk_device_);
+    vk_graphics_pipeline_ = CreateGraphicsPipeline(
+        vk_device_, vk_pipeline_layout_, vk_render_pass_);
     vk_cmd_pool_ = CreateCommandPool(vk_device_,
                                      queue_indices_.graphics_queue_idx.value());
 
@@ -578,6 +717,8 @@ class VulkanRenderer : public Renderer
   vk::Format vk_format_;
   vk::SwapchainKHR vk_swapchain_;
   vk::RenderPass vk_render_pass_;
+  vk::PipelineLayout vk_pipeline_layout_;
+  vk::Pipeline vk_graphics_pipeline_;
   vk::CommandPool vk_cmd_pool_;
   vk::Device vk_device_;
   QueueFamilyIndices queue_indices_;
